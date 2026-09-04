@@ -1,0 +1,119 @@
+{
+  "sources": {
+    "thumbnail": {
+      "file": "reference/ngnl-thumbnail.webp",
+      "note": "1280x720 close-up of the board; thin features survive here",
+      "grid": {
+        "x0": 102.0,
+        "y0": 17.3,
+        "square_width": 219.8,
+        "square_height": 219.6,
+        "supersampling": 5,
+        "pad": 14
+      }
+    },
+    "board frame": {
+      "file": "reference/board-frame-avg.png",
+      "note": "114 identical frames (33.1-35.9 s) averaged at 1920x1080 to cancel codec noise",
+      "grid": {
+        "x0": 21.0,
+        "y0": 27.0,
+        "square_width": 99.25,
+        "square_height": 98.0,
+        "supersampling": 8,
+        "pad": 8
+      }
+    },
+    "late board": {
+      "file": "reference/board-frame-late.png",
+      "note": "later board shot, 123 px squares; the only frame with a legible king",
+      "grid": {
+        "x0": 18.5,
+        "y0": 8.5,
+        "square_width": 123.4,
+        "square_height": 123.5,
+        "supersampling": 8,
+        "pad": 12
+      }
+    },
+    "close-up": {
+      "file": "reference/pieces-closeup.png",
+      "note": "three squares filling the frame; the sharpest bishop available",
+      "grid": {
+        "x0": 4.0,
+        "y0": -1.0,
+        "square_width": 342.0,
+        "square_height": 342.0,
+        "supersampling": 4,
+        "pad": 4
+      }
+    }
+  },
+  "instances": {
+    "pawn": {
+      "source": "thumbnail",
+      "file": 1,
+      "rank": 2,
+      "polarity": "light"
+    },
+    "knight": {
+      "source": "thumbnail",
+      "file": 3,
+      "rank": 0,
+      "polarity": "dark"
+    },
+    "bishop": {
+      "source": "close-up",
+      "file": 0,
+      "rank": 0,
+      "polarity": "dark"
+    },
+    "rook": {
+      "source": "board frame",
+      "file": 7,
+      "rank": 0,
+      "polarity": "dark"
+    },
+    "queen": {
+      "source": "thumbnail",
+      "file": 0,
+      "rank": 0,
+      "polarity": "light"
+    },
+    "king": {
+      "source": "late board",
+      "file": 6,
+      "rank": 0,
+      "polarity": "dark"
+    }
+  },
+  "symmetrised": [
+    "bishop",
+    "king",
+    "pawn",
+    "queen",
+    "rook"
+  ],
+  "height_in_squares": {
+    "pawn": 0.753,
+    "knight": 0.816,
+    "bishop": 0.784,
+    "rook": 0.782,
+    "queen": 0.829,
+    "king": 0.696
+  },
+  "reconstruction": {
+    "pawn": "geometry, see design.py",
+    "knight": "smoothed trace",
+    "bishop": "geometry, see design.py",
+    "rook": "geometry, see design.py",
+    "queen": "geometry, see design.py",
+    "king": "geometry, see design.py"
+  },
+  "detail_marks": {
+    "bishop": "latin cross, hole y 0.315-0.616, bar at y 0.404; long needle to y 0.188",
+    "queen": "latin cross, hole y 0.460-0.684, bar at y 0.572",
+    "king": "latin cross, part of the silhouette: arms y 0.072-0.138 out to x 0.121",
+    "knight": "eye, centre (-0.190, 0.305), radii 0.024 x 0.039, tilted 25 degrees"
+  }
+}

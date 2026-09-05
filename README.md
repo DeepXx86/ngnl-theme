@@ -2,6 +2,14 @@
 
 Fan-made *No Game No Life* SVG pieces for Chess.com.
 
+## Result
+
+The theme running on Chess.com, next to the board it was traced from.
+
+| Chess.com | Anime |
+|---|---|
+| ![The theme applied on Chess.com](result/game_setup_board.png) | ![The same position in the source video](result/anime_setup_board.png) |
+
 ## Install
 
 - **Tampermonkey** (recommended): new script, paste `ngnl-theme.user.js`, save,

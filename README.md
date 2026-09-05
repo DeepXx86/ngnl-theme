@@ -4,49 +4,31 @@ Fan-made *No Game No Life* SVG pieces for Chess.com.
 
 ## Install
 
-The Tampermonkey file contains 12 PNG textures rendered from the SVG pieces.
-
 - **Tampermonkey** (recommended): new script, paste `ngnl-theme.user.js`, save,
   refresh chess.com.
-- **Stylus:** works only on older DOM boards. Do not enable it together with
-  Tampermonkey on the WebGL game board.
+- **Stylus:** new style, paste `ngnl-theme.css`, save, refresh.
 
-Neither touches the board colours. Your own board theme stays exactly as you set
-it.
+### Turning parts on and off
 
-## Why it used to flash and revert
+Two switches sit at the top of `ngnl-theme.user.js`. Set either to `false`, save,
+refresh:
 
-Chess.com uses a WebGL canvas on game boards and injects its own `<style>` at
-runtime containing rules like
-
-```css
-#board-play-computer .piece.wp,
-#board-play-computer .promotion-piece.wp,
-#board-play-computer .vfx .element.wp { background-image: url(...theme.png) }
+```js
+const NGNL_PIECES = true;
+const NGNL_BOARD_COLORS = true;
 ```
 
-with the theme's PNG hard-coded and an ID in the selector. A style that only
-overrides the custom properties therefore wins the first paint - which is the
-second of NGNL pieces you saw - and loses the moment that block is injected.
+`NGNL_PIECES` is the 12 piece sprites. `NGNL_BOARD_COLORS` is the board itself,
+in the anime's mint `#8ef0c8` and blue `#5786e7`. Turn the board off to keep your
+own Chess.com board theme and only change the pieces. Both `false` injects
+nothing at all.
 
-The fix is to match the same three element shapes with `!important`. Chess.com
-declares those rules *without* `!important`, so ours wins regardless of
-specificity or injection order. The custom properties are still set as well,
-because other surfaces on the site do read them.
+The Stylus file has no switches - it is plain CSS. To drop the board colours
+there, delete the rule block containing `--ngnl-board`.
 
-The old script also applied its rules through `*:not(svg)`, which redeclared
-twelve custom properties on every element in the document. That is expensive and
-is the likely reason the board theme itself reset. It now writes to `:root` and
-to the piece selectors only.
+To change the colours, edit `BOARD_LIGHT` and `BOARD_DARK` in `build.py` and
+re-run it.
 
-Because chess.com is a single-page app, a `MutationObserver` re-appends the
-style if it is ever removed, debounced to one pass per tick. It uses
-`setTimeout` rather than `requestAnimationFrame` so it still runs when the tab
-is in the background.
-
-Verified against a live board: all 12 pieces override, the style survives both a
-newly injected chess.com rule and outright removal of the style element, and the
-board colours are unchanged.
 
 ## Rebuild
 
@@ -66,3 +48,9 @@ Reference video: <https://www.youtube.com/watch?v=vZKn-tQ6c0E>
 
 This fan-made set is intended for personal use. The *No Game No Life* name and
 source artwork belong to their respective rights holders.
+
+## Note
+
+I did my best with this project! I’m not an artist, so I used code to create and recreate the images as accurately as I could.
+
+I’ll keep improving and upgrading the theme in the future… probably later though, because I’m lazy 😭

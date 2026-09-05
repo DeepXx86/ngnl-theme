@@ -19,18 +19,12 @@ MASKS = ROOT / "extracted-pieces" / "masks"
 PIECES = ROOT / "pieces"
 MAP = ROOT / "extracted-pieces" / "extraction-map.json"
 
-# grid: x0, y0, square width, square height, supersampling, padding
 GRIDS = {
     "thumbnail": (102.0, 17.3, 219.8, 219.6, 5, 14),
     "board frame": (21.0, 27.0, 99.25, 98.0, 8, 8),
     "late board": (18.5, 8.5, 123.4, 123.5, 8, 12),
-    # The close-up is already cropped to three squares, so its "grid" is the
-    # square pitch measured across them; there is only one rank in it.
     "close-up": (4.0, -1.0, 342.0, 342.0, 4, 4),
 }
-# piece -> source, file, rank, polarity.  Light-green squares are used wherever
-# possible: a piece on a blue square has about half the contrast and falls apart
-# under thresholding.
 INSTANCES = {
     "p": ("thumbnail", 1, 2, "light"),
     "n": ("thumbnail", 3, 0, "dark"),
@@ -51,38 +45,19 @@ PIECE_NAMES = {"p": "pawn", "n": "knight", "b": "bishop",
                "r": "rook", "q": "queen", "k": "king"}
 ORDER = "pnbrqk"
 
-# Layout inside the 100x100 viewBox.
-# The outline is painted OUTSIDE the silhouette: the body is stroked once at
-# double width and then filled over, so the fill covers the inner half of the
-# stroke.  A centred stroke eats OUTLINE units into every edge, which is enough
-# to swallow a thin feature whole - the bishop's needle is only about 1.2 units
-# wide, so an inner half of the same order erased it and left just the outline.
-# TOP and SIDE leave room for the mitre overshoot at the sharp tips: a spike
-# joined at a few degrees extends the outline by up to STROKE * miterlimit
-# beyond the point itself, and the tips must not touch the viewBox edge.
 BASELINE = 95.0
 TOP = 9.0
 SIDE = 8.0
-OUTLINE = 1.8                 # visible band, entirely outside the shape
+OUTLINE = 1.8                
 STROKE = OUTLINE * 2
 
-# Sampled off the sources.  On screen the anime pieces are a slate blue, not
-# black: the core of a dark piece measures #41689f and its glow rim #cfeef2,
-# while a light piece is #f5f7fb with a pale lavender rim.  The fills below keep
-# those hues but go a few steps deeper, because the frames are a bloomed CRT
-# shot and the sampled values alone do not separate on every board theme.
 THEME = {
     "w": {"fill": "#f3f7fb", "line": "#8fa6d6", "glow": "#dbe7ff", "label": "white"},
     "b": {"fill": "#33578f", "line": "#d2f0f7", "glow": "#8bd8f2", "label": "black"},
 }
 
 
-# --------------------------------------------------------------------------- #
-# silhouette recovery
-# --------------------------------------------------------------------------- #
-
 def square(img, source, file_index, rank_index, pad=None, scale=None):
-    """Sub-pixel crop of one board square, magnified."""
     x0, y0, sx, sy, default_scale, default_pad = GRIDS[source]
     pad = default_pad if pad is None else pad
     scale = default_scale if scale is None else scale
@@ -95,7 +70,6 @@ def square(img, source, file_index, rank_index, pad=None, scale=None):
 
 
 def silhouette(big, source, polarity):
-    """Threshold one magnified square into a piece mask."""
     scale, pad = GRIDS[source][4], GRIDS[source][5]
     lightness = cv2.cvtColor(big, cv2.COLOR_BGR2LAB)[:, :, 0].astype(np.float64)
     lightness = cv2.GaussianBlur(lightness, (0, 0), scale * 0.35)
@@ -150,7 +124,6 @@ def fill_holes(mask):
 
 
 def normalised(mask):
-    """Outline points scaled so the piece is 1.0 tall and centred on x = 0."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     contour = max(contours, key=cv2.contourArea).astype(np.float32)
     ys, xs = np.nonzero(mask)
@@ -162,12 +135,7 @@ def normalised(mask):
     return points
 
 
-# --------------------------------------------------------------------------- #
-# the knight: the one piece that stays a trace
-# --------------------------------------------------------------------------- #
-
 def knight_outline(mask, epsilon=0.0022, sharp_deg=46.0, round_frac=0.62):
-    """Simplify the knight contour, rounding only the shallow turns."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     contour = max(contours, key=cv2.contourArea).astype(np.float32)
     simple = cv2.approxPolyDP(contour, epsilon * cv2.arcLength(contour, True), True)
@@ -178,7 +146,6 @@ def knight_outline(mask, epsilon=0.0022, sharp_deg=46.0, round_frac=0.62):
     points[:, 0] = (points[:, 0] - (xs.min() + xs.max()) / 2.0) / height
     points[:, 1] = (points[:, 1] - ys.min()) / height
 
-    # Sit the knight on the same flat base as the other five.
     on_base = points[:, 1] > 0.97
     points[on_base, 1] = points[on_base, 1].mean()
 
@@ -233,10 +200,6 @@ def knight_path(points, radii, tf, digits=2):
     return "".join(parts)
 
 
-# --------------------------------------------------------------------------- #
-# assembly
-# --------------------------------------------------------------------------- #
-
 SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="NGNL {label} {piece}" shape-rendering="geometricPrecision">
   <defs>
     <filter id="ngnl-glow" x="-25%" y="-25%" width="150%" height="150%">
@@ -262,7 +225,6 @@ def half_width(code, knight):
 def build(images, report=False):
     knight = knight_outline(piece_mask(images, "n"))
 
-    # One shared unit keeps the pieces in the proportions the anime gives them.
     unit = min((BASELINE - TOP) / max(design.HEIGHT.values()),
                (50.0 - SIDE) / max(half_width(c, knight) * design.HEIGHT[c]
                                    for c in ORDER))

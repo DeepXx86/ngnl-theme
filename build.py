@@ -1,36 +1,72 @@
 import base64
+import io
 import json
 from pathlib import Path
 
 import cairosvg
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
 PIECES = ROOT / "pieces"
 CSS_OUT = ROOT / "ngnl-theme.css"
 USERSCRIPT_OUT = ROOT / "ngnl-theme.user.js"
 NAMES = ("wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk")
+VERSION = "2.8.0"
+TEXTURE = 256
+
+BOARD_LIGHT = (142, 240, 200)
+BOARD_DARK = (87, 134, 231)
+BOARD_SQUARE = 64
 
 TARGETS = (".piece.{name}", ".promotion-piece.{name}", ".vfx .element.{name}")
+BOARD_TARGETS = ("wc-chess-board", "chess-board", ".board", ".fade-in-overlay")
+
+BOARD_HOSTS = ('wc-chess-board, chess-board, .board, .fade-in-overlay, '
+               '[class*="board"]')
+
+BOARD_TEXTURE = (r'(chess-themes/boards/'
+                 r'|assets-themes\.chess\.com/image/[^/"]+/\d+\.png)')
+
+NL = "\n"
 
 
-def data_uri(name: str) -> str:
-    source = (PIECES / f"{name}.svg").read_bytes()
+def piece_uri(name: str) -> str:
     texture = cairosvg.svg2png(
-        bytestring=source,
-        output_width=256,
-        output_height=256,
+        bytestring=(PIECES / f"{name}.svg").read_bytes(),
+        output_width=TEXTURE,
+        output_height=TEXTURE,
     )
-    encoded = base64.b64encode(texture).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return "data:image/png;base64," + base64.b64encode(texture).decode("ascii")
 
 
-def piece_rules(uris: dict[str, str], indent: str = "") -> list[str]:
-    lines = []
+def board_uri() -> str:
+    size = BOARD_SQUARE * 8
+    board = Image.new("RGB", (size, size), BOARD_LIGHT)
+    dark = Image.new("RGB", (BOARD_SQUARE, BOARD_SQUARE), BOARD_DARK)
+    for rank in range(8):
+        for file in range(8):
+            if (rank + file) % 2:
+                board.paste(dark, (file * BOARD_SQUARE, rank * BOARD_SQUARE))
+    buffer = io.BytesIO()
+    board.save(buffer, "PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def piece_css(uris: dict[str, str], indent: str = "") -> list[str]:
+    lines = [f"{indent}:root {{"]
+    for name in NAMES:
+        lines.append(f'{indent}  --ngnl-{name}: url("{uris[name]}");')
+    lines.append("")
+    for name in NAMES:
+        lines.append(
+            f"{indent}  --theme-piece-set-{name}: var(--ngnl-{name}) !important;"
+        )
+    lines += [f"{indent}}}", ""]
     for name in NAMES:
         selector = ", ".join(t.format(name=name) for t in TARGETS)
         lines += [
             f"{indent}{selector} {{",
-            f'{indent}  background-image: url("{uris[name]}") !important;',
+            f"{indent}  background-image: var(--ngnl-{name}) !important;",
             f"{indent}  background-size: 100% 100% !important;",
             f"{indent}  background-repeat: no-repeat !important;",
             f"{indent}  background-position: center !important;",
@@ -40,40 +76,55 @@ def piece_rules(uris: dict[str, str], indent: str = "") -> list[str]:
     return lines
 
 
-def variable_rule(uris: dict[str, str], indent: str = "") -> list[str]:
-    lines = [f"{indent}:root {{"]
-    for name in NAMES:
-        lines.append(f'{indent}  --theme-piece-set-{name}: url("{uris[name]}") !important;')
-    lines += [f"{indent}}}", ""]
-    return lines
+def board_rule(indent: str = "") -> list[str]:
+    return [
+        f"{indent}{', '.join(BOARD_TARGETS)} {{",
+        f"{indent}  background-image: var(--ngnl-board) !important;",
+        f"{indent}  background-size: 100% 100% !important;",
+        f"{indent}  background-repeat: no-repeat !important;",
+        f"{indent}  background-position: center !important;",
+        f"{indent}}}",
+        "",
+    ]
 
 
-def build_css(uris: dict[str, str]) -> str:
+def board_css(uri: str, indent: str = "") -> list[str]:
+    return [
+        f"{indent}:root {{",
+        f'{indent}  --ngnl-board: url("{uri}");',
+        f"{indent}  --theme-board-style-image: var(--ngnl-board) !important;",
+        f"{indent}}}",
+        "",
+    ] + board_rule(indent)
+
+
+def build_css(uris: dict[str, str], board: str) -> str:
     lines = [
         "/* ==UserStyle==",
         "@name           NGNL Chess Pieces",
         "@namespace      github.com/ngnl-theme",
-        "@version        2.2.0",
+        f"@version        {VERSION}",
         "@description    Fan-made No Game No Life chess pieces for Chess.com.",
         "==/UserStyle== */",
         "",
         '@-moz-document domain("chess.com") {',
         "",
-        "  /* Board colours are deliberately untouched - they are your setting. */",
-        "",
     ]
-    lines += piece_rules(uris, "  ")
+    lines += piece_css(uris, "  ")
+    lines += board_css(board, "  ")
     lines.append("}")
-    return "\n".join(lines)
+    return NL.join(lines)
 
 
-def build_userscript(uris: dict[str, str]) -> str:
-    entries = [f"  [{json.dumps(n)}, {json.dumps(uris[n])}]," for n in NAMES]
-    return "\n".join([
+def build_userscript(uris: dict[str, str], board: str) -> str:
+    board_rule_js = " +\n".join(
+        "    " + json.dumps(line + "\n") for line in board_rule()
+    )
+    return NL.join([
         "// ==UserScript==",
         "// @name         NGNL Chess Pieces",
         "// @namespace    github.com/ngnl-theme",
-        "// @version      2.2.0",
+        f"// @version      {VERSION}",
         "// @description  Fan-made No Game No Life piece set for Chess.com.",
         "// @match        https://www.chess.com/*",
         "// @match        https://chess.com/*",
@@ -84,78 +135,92 @@ def build_userscript(uris: dict[str, str]) -> str:
         "(function () {",
         '  "use strict";',
         "",
-        "  const EMBEDDED_PNGS = new Map([",
-        "    /* White */",
-        *[f"  {e}" for e in entries[:6]],
-        "    /* Black */",
-        *[f"  {e}" for e in entries[6:]],
-        "  ]);",
+        "  const NGNL_PIECES = true;",
+        "  const NGNL_BOARD_COLORS = true;",
         "",
-        "  function makeTextureUrl(dataUri) {",
-        '    const encoded = dataUri.slice(dataUri.indexOf(",") + 1);',
-        "    const binary = atob(encoded);",
-        "    const bytes = new Uint8Array(binary.length);",
-        "    for (let i = 0; i < binary.length; i += 1) {",
-        "      bytes[i] = binary.charCodeAt(i);",
-        "    }",
-        '    return URL.createObjectURL(new Blob([bytes], { type: "image/png" }));',
-        "  }",
+        "  const PIECE_CSS = " + json.dumps(NL.join(piece_css(uris))) + ";",
         "",
-        "  // PixiJS rejects long data: URLs as WebGL texture sources on the",
-        "  // game board. Short blob: URLs decode as normal PNG images.",
-        "  const PIECES = new Map(Array.from(EMBEDDED_PNGS, ([name, dataUri]) =>",
-        "    [name, makeTextureUrl(dataUri)]",
-        "  ));",
+        "  const BOARD_URI = " + json.dumps(board) + ";",
         "",
-        "  // Chess.com paints the board with its own ID-scoped rules and no",
-        "  // !important, so these win no matter what order the styles land in.",
-        "  // The custom properties are set too, for the surfaces that read them.",
-        "  const CSS = [",
-        '    "html:root {",',
-        "    ...Array.from(PIECES, ([name, url]) =>",
-        '      `  --theme-piece-set-${name}: url("${url}") !important;`),',
-        '    "}",',
-        "    ...Array.from(PIECES, ([name, url]) => [",
-        '      `.piece.${name}, .promotion-piece.${name}, .vfx .element.${name} {`,',
-        '      `  background-image: url("${url}") !important;`,',
-        '      "  background-size: 100% 100% !important;",',
-        '      "  background-repeat: no-repeat !important;",',
-        '      "  background-position: center !important;",',
-        '      "}",',
-        '    ].join("\\n")),',
-        '  ].join("\\n");',
+        "  const BOARD_IMAGE = 'url(\"' + BOARD_URI + '\")';",
+        "",
+        "  const BOARD_CSS =",
+        "    ':root {\\n  --ngnl-board: ' + BOARD_IMAGE + ';\\n' +",
+        "    '  --theme-board-style-image: var(--ngnl-board) !important;\\n}\\n\\n' +",
+        board_rule_js + ";",
+        "",
+        "  const CSS =",
+        '    (NGNL_PIECES ? PIECE_CSS : "") +',
+        '    (NGNL_BOARD_COLORS ? BOARD_CSS : "");',
         "",
         '  const STYLE_ID = "ngnl-piece-set";',
+        "  const BOARD_HOSTS = " + json.dumps(BOARD_HOSTS) + ";",
+        "  const BOARD_TEXTURE = new RegExp(" + json.dumps(BOARD_TEXTURE) + ");",
         "",
         "  function install() {",
+        "    if (!CSS) return;",
         "    let style = document.getElementById(STYLE_ID);",
         "    if (!style) {",
         '      style = document.createElement("style");',
         "      style.id = STYLE_ID;",
+        "    }",
+        "    if (style.textContent !== CSS) {",
         "      style.textContent = CSS;",
         "    }",
         "    const parent = document.head || document.documentElement;",
-        "    // Keep it last so it also wins on ties, not just on !important.",
         "    if (style.parentNode !== parent || parent.lastChild !== style) {",
         "      parent.appendChild(style);",
         "    }",
         "  }",
         "",
-        "  install();",
+        "  function paintBoard(el) {",
+        "    if (!el || !el.style) return false;",
+        '    if (el.style.backgroundImage.indexOf("data:") !== -1) return false;',
+        '    el.style.setProperty("background-image", BOARD_IMAGE, "important");',
+        '    el.style.setProperty("background-size", "100% 100%", "important");',
+        '    el.style.setProperty("background-repeat", "no-repeat", "important");',
+        '    el.style.setProperty("background-position", "center", "important");',
+        "    return true;",
+        "  }",
         "",
-        "  // Chess.com is a single-page app: it swaps boards in and out and",
-        "  // injects fresh <style> blocks as you navigate. Re-assert on change,",
-        "  // debounced to one pass per tick so this stays cheap.  setTimeout,",
-        "  // not requestAnimationFrame: rAF is paused in a background tab, and",
-        "  // the style has to be restored even when the tab is not being looked",
-        "  // at.",
+        "  function paintBoards() {",
+        "    if (!NGNL_BOARD_COLORS) return 0;",
+        "    let count = 0;",
+        "    try {",
+        '      const piece = document.querySelector(".piece");',
+        "      if (piece && piece.parentElement) {",
+        "        if (paintBoard(piece.parentElement)) count += 1;",
+        "      }",
+        "      const nodes = document.querySelectorAll(BOARD_HOSTS);",
+        "      for (let i = 0; i < nodes.length; i += 1) {",
+        "        const el = nodes[i];",
+        "        if (!el.style) continue;",
+        '        if (el.style.backgroundImage.indexOf("data:") !== -1) continue;',
+        "        const painted = window.getComputedStyle(el).backgroundImage;",
+        '        if (!painted || painted === "none") continue;',
+        "        if (!BOARD_TEXTURE.test(painted)) continue;",
+        "        if (paintBoard(el)) count += 1;",
+        "      }",
+        "    } catch (error) {",
+        "      return count;",
+        "    }",
+        "    return count;",
+        "  }",
+        "",
+        "  function apply() {",
+        "    install();",
+        "    paintBoards();",
+        "  }",
+        "",
+        "  apply();",
+        "",
         "  let queued = false;",
         "  const observer = new MutationObserver(function () {",
         "    if (queued) return;",
         "    queued = true;",
         "    setTimeout(function () {",
         "      queued = false;",
-        "      install();",
+        "      apply();",
         "    }, 0);",
         "  });",
         "  observer.observe(document.documentElement, {",
@@ -163,17 +228,31 @@ def build_userscript(uris: dict[str, str]) -> str:
         "    subtree: true,",
         "  });",
         "",
-        '  document.addEventListener("DOMContentLoaded", install);',
-        '  console.info("[NGNL Theme] v2.2.0: blob PNG textures installed");',
+        '  document.addEventListener("DOMContentLoaded", apply);',
+        "  window.NGNL_THEME = {",
+        f'    version: "{VERSION}",',
+        "    pieces: NGNL_PIECES,",
+        "    board: NGNL_BOARD_COLORS,",
+        "    css: CSS,",
+        "    reapply: apply,",
+        "    paintBoards: paintBoards,",
+        "    boardElement: function () {",
+        '      const piece = document.querySelector(".piece");',
+        "      return piece ? piece.parentElement : null;",
+        "    },",
+        "  };",
+        '  console.info("[NGNL Theme] v' + VERSION
+        + ' pieces=" + NGNL_PIECES + " board=" + NGNL_BOARD_COLORS);',
         "})();",
         "",
     ])
 
 
 def main() -> None:
-    uris = {name: data_uri(name) for name in NAMES}
-    CSS_OUT.write_text(build_css(uris), encoding="utf-8")
-    USERSCRIPT_OUT.write_text(build_userscript(uris), encoding="utf-8")
+    uris = {name: piece_uri(name) for name in NAMES}
+    board = board_uri()
+    CSS_OUT.write_text(build_css(uris, board), encoding="utf-8")
+    USERSCRIPT_OUT.write_text(build_userscript(uris, board), encoding="utf-8")
     print(CSS_OUT)
     print(USERSCRIPT_OUT)
 
